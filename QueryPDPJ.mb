@@ -1,0 +1,2259 @@
+include "MAPBASIC.DEF"
+include "AUTO_LIB.DEF"
+include "MENU.DEF"
+
+Declare Sub Main()
+Declare Sub Q_kontrak()
+Declare Sub Q_idpel()
+Declare Sub Q_nama()
+Declare Sub Q_alamat()
+Declare Sub Q_gardu()
+Declare Sub Cari_Table_Aktif()
+Declare Sub Q_CO()
+Declare Sub Q_over_reg()
+Declare Sub Q_Snapp_TRTM()
+Declare Sub Q_coor()
+Declare Sub Q_Snapp_TRTM_Akhir()
+Declare Sub Q_insert_coord_awal()
+Declare Sub Q_insert_coord_akhir()
+Declare Sub Q_Isi_coord_sebenarnya(ByVal xy as String,ByVal tbl as String)
+Declare Sub Q_insert_coord_awal_xy()
+Declare Sub Q_insert_coord_akhir_xy
+Declare Sub Q_insert_coord_gabungan(Byval xy as String)
+Declare Sub Q_close_tools()
+Declare Sub Q_create_point()
+Declare Function MapperId(Byval nama_tabel as string) as integer
+Declare Sub Q_Pencarian()
+Declare Sub Q_kontrol()
+
+'Declarasi Table Aktif
+Global Table_aktif() as string
+Global Akt_t as integer
+Global Dir_aktif as string
+Global obj_cari(),opr_banding() as string
+
+'Declarasi Table2 Aktif
+Global Tab_dil as integer
+Global Tab_sr as integer
+Global Tab_gardu as integer
+Global Tab_kapling as integer
+
+
+
+''''''''''''''''''''''''''''''''''''''' Ketika Program Dijalankan '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub Main
+
+OnError Goto Err_handler
+
+
+' Bikin Menu Cek Object
+
+Create Menu "Cek O&bject..." as "Cek &Other Object In Table" HelpMsg "Proses pengecekan object yang tidak seharusnya" Calling Q_CO,
+	"Cek Overlapping &Region" Helpmsg "Proses pengecekan object yang menumpuk ( khusus region)" calling Q_over_reg
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'Bikin Menu Cek Snapping
+
+Create Menu "Cek Sna&pping..." as "Snapping Coordinat A&khir -> Proses I" HelpMsg "Proses cek snapping antara SUTR - TIANG JTR,SUTM - TIANG JTM atau KabelSR - Pelanggan (Untuk pengecekan coordinat akhir)" Calling Q_Snapp_TRTM,
+	"(-",
+	"Snapping Coordinat A&wal -> Proses II" HelpMsg "Proses cek snapping antara SUTR - TIANG JTR,SUTM - TIANG JTM atau KabelSR - Pelanggan (Untuk pengecekan coordinat awal)" Calling Q_Snapp_TRTM_Akhir
+
+' Bikin Menu Isi Coordinat
+
+Create Menu "Isi &Coordinat..." as "Isi Coordinat A&wal X1 / Y1" HelpMsg "Proses mengisi coordinat awal X1 ataupun Y1" Calling Q_insert_coord_awal,
+	"Isi Coordinat Ak&hir X2 / Y2" HelpMsg "Proses mengisi coordinat akhir X2 ataupun Y2" Calling Q_insert_coord_akhir,
+	"(-",
+	"Isi Coordinat Awal X dan Awal Y (XY&1)" HelpMsg "Proses menggabungkan antara coordinat awal x dan coordinat awal y" Calling Q_insert_coord_awal_xy,
+	"Isi Coordinat Akhir X dan Akhir Y (XY&2)" HelpMsg "Proses menggabungkan antara coordinat akhir x dan coordinat akhir y" Calling Q_insert_coord_akhir_xy
+
+' Tambahkan Pada Menu PDPJ
+
+Create Menu "Tool P&DPJ" as 
+	"&Set CoordSys..." HelpMsg "Setting Coordinat system pada map sehingga akurasinya semakin baik" Calling Q_coor,
+	"(-",
+	"Pencarian" HelpMsg "Menu dari pencarian yang dibagi kedalam beberapa sub menu" Calling Q_Pencarian,
+	" " + Chr$(10) + "&No Kontrak" HelpMsg "Query Berdasarkan No Kontrak dan diteruskan ke sr untuk melihat lokasi pelanggan"  Calling Q_kontrak,
+	" " + Chr$(10) + "No &Kontrol" HelpMsg "Query Berdasarkan No Kontrol dan diteruskan ke sr untuk melihat lokasi pelanggan"  Calling Q_kontrol,
+	" " + Chr$(10) + "&Idpel" HelpMsg "Query Berdasarkan ID Pelanggan" Calling Q_idpel,
+	" " + Chr$(10) + "Na&ma" HelpMsg "Query Berdasarkan Nama Pelanggan" Calling Q_nama,
+	" " + Chr$(10) + "&Alamat" HelpMsg "Query Berdasarkan Alamat Pelanggan" Calling Q_alamat,
+	" " + Chr$(10) + "&Gardu" HelpMsg "Query Berdasarkan Gardu" Calling Q_gardu,
+	"(-",
+	"Isi &Coordinat..." as "Isi &Coordinat...",
+	"Cek O&bject..." as "Cek O&bject...",
+	"Cek Sna&pping..." as "Cek Sna&pping...",
+	"Membuat Poin&t Dari coordinat" HelpMsg "Proses membuat point dari coordinat objek lain misalnya: coordinat line" Calling Q_create_point,
+	"(-",
+	"Close To&ols..." HelpMsg "Mengeluarkan Tools PDPJ dari Aplikasi MapInfo" Calling Q_close_tools
+
+Alter Menu Bar Remove "Tool P&DPJ","Window","Help"
+Alter Menu Bar Add "Tool P&DPJ","Window","Help"
+
+OnError Goto 0
+Exit Sub
+
+ Err_handler:
+
+	 Note Error$() + " #" + err()
+	 Exit sub
+
+End Sub
+
+'''''''''''' Hanya untuk subrutin temporary saja ''''''''''''''''''''
+Sub Q_Pencarian()
+End Sub
+
+'''''''''''''''''''''''''''''''' Set Koordinat '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub Q_coor()
+
+OnError Goto Err_handler
+
+dim akt_m as SmallInt
+	akt_m=0
+
+Open File  ApplicationDirectory$() + "CoordSys.dat" For Input As #1
+
+Do While Not EOF(1)
+	Line Input #1,Dir_aktif
+Loop
+
+Close File #1
+
+Nextt :
+
+dim Coor as string
+dim cont as string
+	cont = "CoordSys Earth Projection 8, 104," + chr$(34) + "in" + Chr$(34) + " , 129, 0, 0.9996, 500000, 0"
+
+Dialog
+	Title "Set Coordinat System..."
+	Control StaticText
+		Title "Coordinat System : "
+	Control EditText
+		into Coor
+		Value Dir_aktif
+		ID 1
+		width 250
+	Control StaticText
+		Title "Note : Bila Coordinat Belum Di Setting maka anda copy melalui menu" 
+		Position 2,30
+	Control StaticText
+		Title "Tools - Tool Manager - CoordSys Bound Manager, Dan Rubah m menjadi in"
+		Position 23,41
+	Control StaticText
+		Title "Contoh : " + cont
+		Position 23,52
+	Control OKButton
+		Position 240,75
+	Control CancelButton
+		Position 280,75
+
+	if CommandInfo(CMD_INFO_DLG_OK) then
+		if akt_m = 0 then
+			if coor <> "" then
+		
+				Open File  ApplicationDirectory$() + "CoordSys.dat" For Output As #2
+
+				Print #2, Coor
+
+				Close File #2		
+
+			End If
+		end if
+	end if	
+
+OnError Goto 0
+Exit Sub
+
+ Err_handler:
+
+	if err()=370 then
+		Note "File CoordSys2.dat tidak ditemukan, silahkan anda buat dulu dengan menggunakan notepad dan rubah extensinya menajdi .dat"
+		akt_m=1
+		Resume Nextt
+	elseif err()=366 then
+		akt_m=1
+		resume nextt
+	else
+		 Note Error$() + " #" + err()
+		 Exit sub
+	end if
+End Sub
+
+''''''''''''''''''''''''''''' Letak Layer aktif ''''''''''''''''''
+
+Function MapperId(Byval nama_tabel as string) as integer
+
+  Dim intWindows, intCounter, intMappers,intlayer as integer
+
+  intWindows = NumWindows()
+  intMappers = 1
+  intlayer=0		
+	
+  For intCounter = 1 to intWindows
+    If WindowInfo(intCounter,WIN_INFO_NAME) = nama_tabel then
+      intlayer = intCounter 
+	   exit for
+    End If
+  Next
+
+ MapperId =intlayer
+
+End Function
+
+
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+''''''''''''''''''''''''''''' Mencari Table Yang Aktif Saat ini '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub Cari_Table_Aktif()
+
+dim tab_open as integer
+	tab_open=NumTables()
+
+if tab_open=0 then 
+	Akt_t=0
+	exit sub
+else
+	Akt_t=tab_open
+end if	
+
+Tab_dil=0
+Tab_sr=0
+Tab_gardu=0
+Tab_kapling=0
+
+dim i as integer
+	
+	Redim Table_aktif(0)
+	Redim Table_aktif(tab_open)
+	
+	for i=1 to tab_open
+		
+		if TableInfo(i,TAB_INFO_NAME) ="" then 
+			exit sub
+		else		
+			Table_aktif(i)=TableInfo(i,TAB_INFO_NAME)		
+			
+			if Ucase$(Table_aktif(i)) like UCase$("DIL%") then
+				Tab_dil=i
+			end if	
+		
+			if Ucase$(Table_aktif(i)) like UCase$("%sr") then
+				Tab_sr=i
+			end if				
+			
+			if Ucase$(Table_aktif(i)) = UCase$("gardu") then
+				Tab_gardu=i
+			end if				
+
+			if Ucase$(Table_aktif(i)) = UCase$("kapling") then
+				Tab_kapling=i
+			end if			
+
+		end if
+	next
+End Sub
+
+
+''''''''''''''''''''''''''''Pencarian Berdasarkan No Kontrak'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub Q_kontrak()
+
+dim kontrak,tab_pilih,tab_pilih2 as string
+
+ OnError GoTo Err_handler
+
+Call Cari_Table_Aktif()
+	if Akt_t=0 then
+		Note "Tidak ada table yang aktif..."
+		OnError GoTo 0
+		exit sub
+	end if
+
+If WindowInfo(FrontWindow(),WIN_INFO_TYPE)<> WIN_MAPPER then
+	note "Saat ini jendela Map Window (PETA) bukan jendela yang terseleksi/aktif, klik dulu di jendela map..!!!"
+	OnError GoTo 0
+	exit sub
+End If
+
+Dialog
+	Title "Cari Berdasarkan No Kontrak"
+	Control StaticText
+		Title "From Table[DIL] : "
+		Position 21,4
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih
+		ID 1
+		Value Tab_dil	
+		width 100
+	Control StaticText
+		Title "Destination Table[SR] : "	
+
+		Position 2,20
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih2
+		ID 2
+		Value Tab_sr
+		width 100
+	Control StaticText
+		Title "No Kontrak : "
+		Position 36,36
+	Control EditText
+		into kontrak
+		ID 3
+		width 100
+
+	Control OKButton
+	Control CancelButton
+
+if CommandInfo(CMD_INFO_DLG_OK) then
+
+		if kontrak="" then
+			Note "No Kontrak yang akan dicari tidak boleh kosong"
+			exit sub
+		end if
+
+	dim hsil as integer,idpel_hsil as Alias	
+'	open Table Table_aktif(tab_pilih) 'Interactive
+
+	select * from Table_aktif(tab_pilih) where No_Kontrak=kontrak into Hsl_Qry_NoKontrak
+
+	hsil=SelectionInfo(SEL_INFO_NROWS)	
+
+	if hsil >1 then
+
+		Browse NO_KONTRAK,IDPEL_LAMA,IDPEL,NAMA,ALAMAT,DAYA from Hsl_Qry_NoKontrak
+		exit sub		
+
+	end if
+	
+	if hsil >=1 then				
+		
+'		idpel_hsil = "Hsl_Qry_NoKontrak.IDPEL"
+
+		dim hsil_idpel as string
+			hsil_idpel= 	Hsl_Qry_NoKontrak.IDPEL				
+
+		dim x,y,x2,y2 as float, win_id as integer
+		select * from Table_aktif(tab_pilih2) where idpel= hsil_idpel		
+
+		win_id = FrontWindow()
+
+ 		Find Using Table_aktif(tab_pilih2)(IDPEL)	
+
+		Find hsil_idpel
+
+		if Commandinfo(CMD_INFO_FIND_RC) >=1 then							
+
+				
+
+				x=CommandInfo(CMD_INFO_X)
+				y=CommandInfo(CMD_INFO_Y)				
+
+				set map 					
+					window win_id
+					Center(x,y)					
+					Zoom 50 Units "m"
+
+		else
+				Note "No Kontrak ["+  kontrak + "]~[KabelSR] Tidak Ditemukan"
+		end if
+	
+	else
+			Note "No Kontrak [" + kontrak + "]~[DIL] Tidak Ditemukan"
+	end if	
+
+end if
+
+ OnError GoTo 0
+ Exit Sub
+
+ Err_handler:
+ Note Error$() + " #" + err()
+ Exit sub
+
+End Sub
+
+''''''''''''''''''''''''''' pencarian berdasarkan no kontrol
+
+Sub Q_kontrol()
+
+dim kontrol,tab_pilih,tab_pilih2 as string
+
+ OnError GoTo Err_handler
+
+Call Cari_Table_Aktif()
+	if Akt_t=0 then
+		Note "Tidak ada table yang aktif..."
+		OnError GoTo 0
+		exit sub
+	end if
+
+If WindowInfo(FrontWindow(),WIN_INFO_TYPE)<> WIN_MAPPER then
+	note "Saat ini jendela Map Window (PETA) bukan jendela yang terseleksi/aktif, klik dulu di jendela map..!!!"
+	OnError GoTo 0
+	exit sub
+End If
+
+Dialog
+	Title "Cari Berdasarkan No Kontrol"
+	Control StaticText
+		Title "From Table[DIL] : "
+		Position 21,4
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih
+		ID 1
+		Value Tab_dil	
+		width 100
+	Control StaticText
+		Title "Destination Table[SR] : "	
+
+		Position 2,20
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih2
+		ID 2
+		Value Tab_sr
+		width 100
+	Control StaticText
+		Title "No Kontrol : "
+		Position 38,36
+	Control EditText
+		into kontrol
+		ID 3
+		width 100
+
+	Control OKButton
+	Control CancelButton
+
+if CommandInfo(CMD_INFO_DLG_OK) then
+
+		if kontrol="" then
+			Note "No Kontrol yang akan dicari tidak boleh kosong"
+			exit sub
+		end if
+
+	dim hsil as integer,idpel_hsil as Alias	
+'	open Table Table_aktif(tab_pilih) 'Interactive
+
+	select * from Table_aktif(tab_pilih) where No_Kontrol=kontrol into Hsl_Qry_NoKontrol
+
+	hsil=SelectionInfo(SEL_INFO_NROWS)	
+
+	if hsil >1 then
+
+		Browse NO_KONTRAK,NO_KONTRAK,IDPEL_LAMA,IDPEL,NAMA,ALAMAT,DAYA from Hsl_Qry_NoKontrol
+		exit sub		
+
+	end if
+	
+	if hsil >=1 then				
+		
+'		idpel_hsil = "Hsl_Qry_NoKontrol.IDPEL"
+
+		dim hsil_idpel as string
+			hsil_idpel= 	Hsl_Qry_NoKontrol.IDPEL				
+
+		dim x,y,x2,y2 as float, win_id as integer
+		select * from Table_aktif(tab_pilih2) where idpel= hsil_idpel		
+
+		win_id = FrontWindow()
+
+ 		Find Using Table_aktif(tab_pilih2)(IDPEL)	
+
+		Find hsil_idpel
+
+		if Commandinfo(CMD_INFO_FIND_RC) >=1 then							
+
+				
+
+				x=CommandInfo(CMD_INFO_X)
+				y=CommandInfo(CMD_INFO_Y)				
+
+				set map 					
+					window win_id
+					Center(x,y)					
+					Zoom 50 Units "m"
+
+		else
+				Note "No Kontrak ["+  kontrol + "]~[KabelSR] Tidak Ditemukan"
+		end if
+	
+	else
+			Note "No Kontrak [" + kontrol + "]~[DIL] Tidak Ditemukan"
+	end if	
+
+end if
+
+ OnError GoTo 0
+ Exit Sub
+
+ Err_handler:
+ Note Error$() + " #" + err()
+ Exit sub
+
+End Sub
+
+'''''''''''''''''''''''
+
+''''''''''''''''''''''''''''Pencarian Berdasarkan Id Pelanggan'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub Q_idpel()
+
+OnError GoTo Err_handler
+
+Call Cari_Table_Aktif()
+	if Akt_t=0 then
+		Note "Tidak ada table yang aktif..."
+		OnError GoTo 0
+		exit sub
+	end if
+
+If WindowInfo(FrontWindow(),WIN_INFO_TYPE)<> WIN_MAPPER then
+	note "Saat ini jendela Map Window (PETA) bukan jendela yang terseleksi/aktif, klik dulu di jendela map..!!!"
+	OnError GoTo 0
+	exit sub
+End If
+
+
+dim isi_idpel as string,status_idpel as SmallInt
+dim hsil as integer
+dim tab_pilih as string
+
+Dialog
+	Title "Cari Berdasarkan IDPel"
+	Control StaticText
+		Title "Destination Table[SR] : "
+		Position 17,4
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih
+		Value Tab_sr
+		ID 1
+		width 100
+	Control StaticText
+		Title "ID Pelanggan Yang Dicari : "
+		Position 5,17
+	Control PopupMenu
+		Title "IDPel Lama;IDPel Baru"
+		Value 2
+		Into status_idpel
+		ID 2
+		Position 30,28
+	Control StaticText
+		Title ":"
+		Position 90,29
+	Control EditText
+		into isi_idpel
+		ID 3
+		Position 97,28
+		width 100		
+	
+	Control OKButton
+	Control CancelButton
+
+if CommandInfo(CMD_INFO_DLG_OK) then
+		
+			if isi_idpel="" then
+				Note "Id Pelanggan yang akan dicari tidak boleh kosong"
+				exit sub
+			end if
+		
+		dim x_idpel,y_idpel as float, win_id_idpel as integer	
+
+'		Open Table Table_aktif(tab_pilih) ' Interactive
+		'Map From KabelSR
+		win_id_idpel = FrontWindow()
+		
+		if status_idpel =1 then
+			select * from Table_aktif(tab_pilih) where IDPEL_LAMA=isi_idpel into Hsl_Qry_IDPEL		
+			Find Using  Table_aktif(tab_pilih)(IDPEL_LAMA)
+		else
+			select * from Table_aktif(tab_pilih) where IDPEL=isi_idpel into Hsl_Qry_IDPEL
+			Find Using  Table_aktif(tab_pilih)(IDPEL)
+		end if
+		
+		hsil=SelectionInfo(SEL_INFO_NROWS)
+		
+		if hsil > 1 then				
+
+			Browse IDPEL,NAMAPLG,KD_GARDU,ALMPLG_ALM,ALMPSL_ALM,DAYA from Hsl_Qry_IDPEL	
+			exit sub
+
+		end if	
+		
+		Find isi_idpel	
+
+		if CommandInfo(CMD_INFO_FIND_RC) >=1 then
+			
+				x_idpel=CommandInfo(CMD_INFO_X)
+				y_idpel=CommandInfo(CMD_INFO_Y)
+				set map 					
+					window win_id_idpel
+					Center(x_idpel,y_idpel)
+					Zoom 75 Units "m"
+
+		else
+				Note "IDPel ~" + isi_idpel + "~ Tidak Ditemukan"
+		end if
+		
+end if
+
+OnError GoTo 0
+Exit Sub
+
+Err_handler:
+
+
+	Note Error$() + " #" + err()
+	Exit sub
+End Sub
+
+''''''''''''''''''''''''''''Pencarian Berdasarkan Nama Pelanggan'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub Q_nama()
+
+OnError Goto Err_handler
+
+Call Cari_Table_Aktif()
+	if Akt_t=0 then
+		Note "Tidak ada table yang aktif..."
+		OnError GoTo 0
+		exit sub
+	end if
+
+
+dim nama,tab_pilih as string,hsil as integer
+
+Dialog
+	Title "Cari Berdasarkan Nama Pelanggan"
+	Control StaticText
+		Title "Destination Table[SR] : "	
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih
+		Value Tab_sr
+		ID 1
+		width 100
+	Control StaticText
+		Title "Nama Pelanggan : "
+		Position 21,22
+	Control EditText
+		into nama
+		ID 2
+		width 100
+
+	Control OKButton
+	Control CancelButton
+
+if CommandInfo(CMD_INFO_DLG_OK) then
+	
+	if nama="" then
+		note "Nama Pelanggan yang akan dicari tidak boleh kosong"
+		exit sub
+	end if
+
+'	open Table Table_aktif(tab_pilih) 'Interactive
+
+	select * from Table_aktif(tab_pilih) where NAMAPLG like "%" + nama + "%" into Hsl_Qry_Nama
+
+	hsil=SelectionInfo(SEL_INFO_NROWS)
+	
+	if hsil >=1 then	
+		Browse IDPEL,NAMAPLG,KD_GARDU,ALMPLG_ALM,ALMPSL_ALM,DAYA from Hsl_Qry_Nama
+	else
+		Note "Nama Pelanggan ~" + nama + "~ Tidak Ditemukan"
+	end if
+
+end if
+
+OnError GoTo 0
+Exit Sub
+
+Err_handler:
+	Note Error$() + " #" + err()
+	Exit sub
+
+End Sub
+
+'''''''''''''''''''''Pencarian Berdasarkan Alamat''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub Q_alamat()
+
+OnError Goto Err_handler
+
+Call Cari_Table_Aktif()
+	if Akt_t=0 then
+		Note "Tidak ada table yang aktif..."
+		OnError GoTo 0
+		exit sub
+	end if
+
+dim alamat,tab_pilih as string,hsil as integer
+
+Dialog
+	Title "Cari Berdasarkan Alamat Pelanggan"
+	Control StaticText
+		Title "Destination Table[SR] : "	
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih
+		Value Tab_sr
+		ID 1
+		width 100
+	Control StaticText
+		Title "Alamat : "
+		Position 54,22
+	Control EditText
+		into alamat
+		ID 2
+		width 100
+
+	Control OKButton
+	Control CancelButton
+
+if CommandInfo(CMD_INFO_DLG_OK) then
+	
+	if alamat ="" then
+		note "Alamat Pelanggan yang akan dicari tidak boleh kosong"
+		exit sub
+	end if
+
+'	open Table Table_aktif(tab_pilih) 'Interactive
+
+	select * from Table_aktif(tab_pilih) where ALMPLG_ALM like "%" + alamat + "%" into Hsl_Qry_Alamat
+
+	hsil=SelectionInfo(SEL_INFO_NROWS)
+	
+	if hsil >=1 then	
+		Browse IDPEL,NAMAPLG,KD_GARDU,ALMPLG_ALM,ALMPSL_ALM,DAYA from Hsl_Qry_Alamat
+	else
+		Note "Alamat ~" + nama + "~ Tidak Ditemukan"
+	end if
+
+end if
+
+OnError GoTo 0
+Exit Sub
+
+Err_handler:
+	Note Error$() + " #" + err()
+	Exit sub
+
+End Sub
+
+'''''''''''''''''''''''''Pencarian Gardu''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub Q_gardu()
+
+OnError Goto Err_handler
+
+Call Cari_Table_Aktif()
+	if Akt_t=0 then
+		Note "Tidak ada table yang aktif..."
+		OnError GoTo 0
+		exit sub
+	end if
+
+If WindowInfo(FrontWindow(),WIN_INFO_TYPE)<> WIN_MAPPER then
+	note "Saat ini jendela Map Window (PETA) bukan jendela yang terseleksi/aktif, klik dulu di jendela map..!!!"
+	OnError GoTo 0
+	exit sub
+End If
+
+
+dim isi_gardu,tab_pilih as string,hsil as integer
+
+Dialog
+	Title "Cari Berdasarkan Gardu"
+	Control StaticText
+		Title "Destination Table[Gardu] : "	
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih
+		Value Tab_gardu
+		ID 1
+		width 100		
+
+	Control StaticText
+		Title "No. Gardu : "
+		Position 52,22
+	Control EditText
+		into isi_gardu
+		ID 2
+		width 100
+
+	Control OKButton
+	Control CancelButton
+
+if CommandInfo(CMD_INFO_DLG_OK) then
+		
+		if isi_gardu="" then
+			note "Kode Gardu yang dicari tidak boleh kosong"
+			exit sub
+		end if	
+
+		dim x_gardu,y_gardu as float, win_id_gardu as integer	
+
+'		Open Table Table_aktif(tab_pilih) 'Interactive
+		win_id_gardu = FrontWindow()
+		
+		select * from Table_aktif(tab_pilih) where KD_GARDU=isi_gardu into Hsl_Qry_Gardu		
+		
+		hsil=SelectionInfo(SEL_INFO_NROWS)
+		
+		if hsil > 1 then	
+	
+			Browse KD_PYLG,KD_GARDU,ALM_GARDU from Hsl_Qry_Gardu		
+			exit sub
+
+		end if		
+		
+		Find Using Table_aktif(tab_pilih)(KD_GARDU)
+	
+		Find isi_gardu					
+
+		if CommandInfo(CMD_INFO_FIND_RC) >=1 then
+					
+
+				x_gardu=CommandInfo(CMD_INFO_X)
+				y_gardu=CommandInfo(CMD_INFO_Y)
+
+				set map
+
+					window win_id_gardu
+					Center(x_gardu,y_gardu)
+					Zoom 35 Units "m"	
+
+		else
+				Note "Kode Gardu ~" + isi_gardu + "~ Tidak Ditemukan"
+		end if
+
+end if
+
+OnError GoTo 0
+Exit Sub
+
+Err_handler:
+
+Note Error$() + " #" + err()
+Exit sub
+
+End Sub
+
+'''''''''''''''''''''''''''Cek Object''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub Q_CO()
+
+OnError Goto Err_handler
+
+Call Cari_Table_Aktif()
+	if Akt_t=0 then
+		Note "Tidak ada table yang aktif..."
+		OnError GoTo 0
+		exit sub
+	end if
+
+dim tab_pilih,hsl_banding,hsl_cari as SmallInt
+
+redim opr_banding(0)
+redim opr_banding(2)
+	opr_banding(1)="="
+	opr_banding(2)="<>"
+	
+
+redim obj_cari(0)
+redim obj_cari(9)
+	obj_cari(1)="Point"
+	obj_cari(2)="Line"
+	obj_cari(3)="Polyline"
+	obj_cari(4)="Arc"
+	obj_cari(5)="Region"
+	obj_cari(6)="Ellipse"
+	obj_cari(7)="Rectangle"
+	obj_cari(8)="Rounded Rectangle"
+	obj_cari(9)="Text"
+
+Dialog
+	Title "Cek Object..."
+	Control StaticText
+		Title "Destination Table : "	
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih
+		Position 20,17
+		id 1
+		Width 103	
+	control PopupMenu
+		Title From Variable opr_banding
+		into hsl_banding
+		Position 127,17
+		id 2
+	control PopupMenu
+		Title From Variable obj_cari
+		into hsl_cari
+		Position 160,17
+		id 3		
+
+	Control OKButton
+	Control CancelButton
+
+if CommandInfo(CMD_INFO_DLG_OK) then
+
+	Do case hsl_cari
+		case 1
+			if hsl_banding=1 then
+				select * from Table_aktif(tab_pilih) where Str$(obj)	="Point" into Hsl_Qry_Cek_Object
+			else
+				select * from Table_aktif(tab_pilih) where Str$(obj)	<>"Point" into Hsl_Qry_Cek_Object
+			end if	
+		case 2		
+			if hsl_banding=1 then
+				select * from Table_aktif(tab_pilih) where Str$(obj)	="Line" into Hsl_Qry_Cek_Object
+			else
+				select * from Table_aktif(tab_pilih) where Str$(obj)	<>"Line" into Hsl_Qry_Cek_Object
+			end if	
+		case 3
+			if hsl_banding=1 then
+				select * from Table_aktif(tab_pilih) where Str$(obj)	="Polyline" into Hsl_Qry_Cek_Object
+			else
+				select * from Table_aktif(tab_pilih) where Str$(obj)	<>"Polyline" into Hsl_Qry_Cek_Object
+			end if				
+		case 4
+			if hsl_banding=1 then
+				select * from Table_aktif(tab_pilih) where Str$(obj)	="Arc" into Hsl_Qry_Cek_Object
+			else
+				select * from Table_aktif(tab_pilih) where Str$(obj)	<>"Arc" into Hsl_Qry_Cek_Object
+			end if				
+		case 5
+			if hsl_banding=1 then
+				select * from Table_aktif(tab_pilih) where Str$(obj)	="Region" into Hsl_Qry_Cek_Object
+			else
+				select * from Table_aktif(tab_pilih) where Str$(obj)	<>"Region" into Hsl_Qry_Cek_Object
+			end if	
+		case 6
+			if hsl_banding=1 then
+				select * from Table_aktif(tab_pilih) where Str$(obj)	="Ellipse" into Hsl_Qry_Cek_Object
+			else
+				select * from Table_aktif(tab_pilih) where Str$(obj)	<>"Ellipse" into Hsl_Qry_Cek_Object
+			end if	
+		case 7
+			if hsl_banding=1 then
+				select * from Table_aktif(tab_pilih) where Str$(obj)	="Rectangle" into Hsl_Qry_Cek_Object
+			else
+				select * from Table_aktif(tab_pilih) where Str$(obj)	<>"Rectangle" into Hsl_Qry_Cek_Object
+			end if
+		case 8
+			if hsl_banding=1 then
+				select * from Table_aktif(tab_pilih) where Str$(obj)	="Rounded Rectangle" into Hsl_Qry_Cek_Object
+			else
+				select * from Table_aktif(tab_pilih) where Str$(obj)	<>"Rounded Rectangle" into Hsl_Qry_Cek_Object
+			end if
+		case 9
+			if hsl_banding=1 then
+				select * from Table_aktif(tab_pilih) where Str$(obj)	="Text" into Hsl_Qry_Cek_Object
+			else
+				select * from Table_aktif(tab_pilih) where Str$(obj)	<>"Text" into Hsl_Qry_Cek_Object
+			end if
+	end Case
+
+		dim hsil as integer
+
+		hsil=SelectionInfo(SEL_INFO_NROWS)
+		
+		if hsil >= 1 then	
+	
+			Browse * From Hsl_Qry_Cek_Object	
+		
+		else
+			
+			Note "Object " + obj_cari(hsl_cari)	+" Tidak Ditemukan.."
+
+		end if		
+
+	
+end if
+
+OnError GoTo 0
+Exit Sub
+
+Err_handler :
+	Note Error$() + " #" + err()
+	Exit sub
+End Sub
+
+'''''''''''''''''''''''''''''''Cek Region Yang Menumpuk/verlapping'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub Q_over_reg()
+OnError GoTo Err_handler
+
+Call Cari_Table_Aktif()
+	if Akt_t=0 then
+		Note "Tidak ada table yang aktif..."
+		OnError GoTo 0
+		exit sub
+	end if
+
+dim tab_pilih as SmallInt
+
+Dialog
+	Title "Cek Overlapping Region"
+	Control StaticText
+		Title "Destination Table :"	
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih
+		Value Tab_kapling
+		id 1
+		width 100
+		
+	Control OKButton
+	Control CancelButton
+
+if CommandInfo(CMD_INFO_DLG_OK) then
+
+		if Ask("Yakin Table yang akan anda cek sudah benar..?","Yes","No") = False then
+			OnError Goto 0
+			Exit Sub
+		End If
+	
+	select * from Table_aktif(tab_pilih) where Str$(obj)	<> "Region"
+
+	dim hsil as integer
+	hsil=SelectionInfo(SEL_INFO_NROWS)
+		
+	if hsil >= 1 then	
+		dim konfir as string
+			konfir="Ada beberapa kesalahan, yaitu : "
+			konfir = konfir & chr$(10) & "1.Ada beberapa data yang tipe objectnya bukan REGION"
+			konfir = konfir & chr$(10) & "2.Anda salah memilih tabel yang akan diperiksa"
+			konfir = konfir & chr$(10) & "Anda ingin melihat data dari kesalahan tersebut...  ???"
+		if Ask(konfir,"Yes","No") = True then
+			Browse * From Selection
+		else
+			OnError GoTo 0
+			exit Sub
+		end if
+	end if		
+	
+	select * from Table_aktif(tab_pilih)
+	Set Map Layer Table_aktif(tab_pilih) Editable On
+
+' Jalankan tools Check Region
+	
+	Run Menu Command M_OBJECTS_CHECK_REGIONS	
+
+	hsil=SelectionInfo(SEL_INFO_NROWS)	
+		if hsil >=1 then
+			Browse * From Selection
+		End If
+
+End If
+
+OnError GoTo 0
+Exit Sub
+
+Err_handler :
+	Note Error$() + " #" + err()
+	Exit sub
+End Sub
+
+''''''''''''''''''''''''''''''Isi Coordinat '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+' isi coordinat xy1
+Sub Q_insert_coord_awal()
+	Call Q_Isi_coord_sebenarnya("AWAL","")
+End Sub
+
+' isi coordinat xy2
+Sub Q_insert_coord_akhir()
+	Call Q_Isi_coord_sebenarnya("AKHIR","")
+End Sub
+
+'Proses isi coordinat
+
+Sub Q_Isi_coord_sebenarnya(ByVal xy as string, ByVal tbl as String)
+OnError GoTo Err_handler
+
+dim coorsys as String
+
+Open File  ApplicationDirectory$() + "CoordSys.dat" For Input As #1
+
+Do While Not EOF(1)
+	Line Input #1,coorsys 
+Loop
+
+Close File #1
+
+if coorsys <>"" then
+	coorsys = "Set " + coorsys 
+
+	Run Command coorsys	
+
+Else
+
+	Note "set terlebih dahulu Coordinat System.."
+	OnError GoTo 0
+	Exit Sub
+
+end if
+
+Call Cari_Table_Aktif()
+	if Akt_t=0 then
+		Note "Tidak ada table yang aktif..."
+		OnError GoTo 0
+		exit sub
+	end if
+
+dim tab_pilih as Smallint
+dim c_x,c_y as Logical
+
+if tbl ="" then
+
+	Dialog
+		Title "Isi Coordinat " + xy
+			Control StaticText
+			Title "Destination Table : "	
+		control PopupMenu
+			Title From Variable Table_aktif
+			into tab_pilih
+			id 1
+			width 100
+		Control GroupBox
+			Title "Target Coordinat..."
+			Position 5,25
+			Height 30 Width 167
+		Control CheckBox
+			Position 15,40
+			Title "-X-"
+			Into	c_x
+			id 2
+		Control CheckBox
+			Position 70,40
+			Title "-Y-"
+			Into	c_y
+			id 3				
+
+		Control OKButton
+		Control CancelButton
+else
+	Dialog
+		Title "Isi Coordinat " + xy
+			Control StaticText
+			Title "Destination Table : "	
+		Control EditText
+			Value tbl
+			Disable
+		Control GroupBox
+			Title "Target Coordinat..."
+			Position 5,25
+			Height 30 Width 167
+		Control CheckBox
+			Position 15,40
+			Title "-X-"
+			Value True
+			Into c_x
+			Disable
+			id 2
+		Control CheckBox
+			Position 70,40
+			Title "-Y-"
+			Value True
+			Into c_y
+			Disable
+			id 3			
+
+		Control OKButton
+		Control CancelButton
+end if
+
+if CommandInfo(CMD_INFO_DLG_OK) then
+
+Nx_UpTab2 :
+
+
+' Tambahkan Field Baru
+
+	dim sql,sql1,sql2 as string
+
+	if tbl ="" then
+
+		Pack Table Table_aktif(tab_pilih) Graphic Data
+
+		sql1= "Create Index On " +  Table_aktif(tab_pilih)
+		sql2= "Create Index On " +  Table_aktif(tab_pilih)
+
+
+		if  xy= "AWAL" then
+				if c_x and c_y then
+					sql = "Alter Table " + Table_aktif(tab_pilih) + " (Add X1 float,Y1 float)"
+					sql1 = sql1 + " (X1)"
+					sql2 = sql2 + " (Y1)"
+
+					Run Command sql					
+					'Run Command sql1					
+					'Run Command sql2					
+
+				elseif c_x and not(c_y) then
+					sql = "Alter Table " + Table_aktif(tab_pilih) + " (Add X1 float)"
+					sql1=sql1 + " (X1)"
+
+					Run Command sql
+					'Run Command sql1
+
+				else
+					sql = "Alter Table " + Table_aktif(tab_pilih) + " (Add Y1 float)"
+					sql1 = sql1 + "(Y1)"
+
+					Run Command sql
+					'Run Command sql1
+
+				end if
+
+		Else
+				if c_x and c_y then
+					sql = "Alter Table " + Table_aktif(tab_pilih) + " (Add X2 float,Y2 float)"
+					sql1 = sql1 + " (X2)"
+					sql2 = sql2 + " (Y2)"
+
+					Run Command sql
+					'Run Command sql1
+					'Run Command sql2
+
+				elseif c_x and not(c_y) then
+					sql = "Alter Table " + Table_aktif(tab_pilih) + " (Add X2 float)"
+					sql1 = sql1 + " (X2)"
+
+					Run Command sql
+					'Run Command sql1
+
+				else
+					sql = "Alter Table " + Table_aktif(tab_pilih) + " (Add Y2 float)"
+					sql1 = sql1 + " (Y2)"
+
+					Run Command sql
+					'Run Command sql1
+
+				end if
+		End If
+
+	else
+
+		Pack Table tbl Graphic Data	
+
+		sql1= "Create Index On " + tbl 
+		sql2= "Create Index On " + tbl
+
+		if xy="AWAL" then
+			sql = "Alter Table " + tbl + " (Add X1 float,Y1 float)"
+			sql1 = sql1 + " (X1)"
+			sql2 = sql2 + " (Y1)"
+
+			Run Command sql
+			'Run Command sql1
+			'Run Command sql2
+	
+
+		else
+			sql = "Alter Table " + tbl + " (Add X2 float,Y2 float)"
+			sql1 = sql1 + " (X2)"
+			sql2 = sql2 + " (Y2)"
+
+			Run Command sql
+			'Run Command sql1
+			'Run Command sql2
+
+
+		End if
+
+	end if
+
+	
+
+
+Nx_UpTab :
+
+'Update Column xy
+
+'dim sql1 as string
+
+	sql1=""
+
+if tbl="" then
+	sql1="Update " + Table_aktif(tab_pilih) + " set "
+else
+		sql1="Update " + tbl + " set "
+end if
+
+	if xy="AWAL"  then
+				if c_x and c_y then
+					sql1=sql1 + "X1=objectgeography(obj,1),Y1=objectgeography(obj,2)"
+				elseif c_x and not(c_y) then
+					sql1=sql1 + "X1=objectgeography(obj,1)"
+				else
+					sql1=sql1 + "Y1=objectgeography(obj,2)"
+				end if
+	Else					
+				if c_x and c_y then
+					sql1=sql1 + "X2=objectgeography(obj,3),Y2=objectgeography(obj,4)"
+				elseif c_x and not(c_y) then
+					sql1=sql1 + "X2=objectgeography(obj,3)"
+				else
+					sql1=sql1 + "Y2=objectgeography(obj,4)"
+				end if			
+	End If
+
+Run Command sql1
+
+' Tambahkan lagi ke layer
+
+	if tbl="" then
+		Add Map Layer Table_aktif(tab_pilih)
+		Note "Pengisian coordinat (" + xy + ") pada tabel " + Table_aktif(tab_pilih) + " selesai dilakukan..."
+	else
+		Add Map Layer tbl
+	end if	
+
+
+end if
+
+OnError GoTo 0
+Exit Sub
+
+Err_handler :
+
+If Err() = 363 then
+	Resume Nx_UpTab
+
+ElseIf Err()=968 then
+	
+	if Ask("Data anda belum disimpan,Anda ingin menyimpannya?","Yes","No")=True then
+
+		if tbl="" then
+			Commit Table Table_aktif(tab_pilih)
+		else
+			Commit Table tbl
+		end if
+
+	else
+
+		if tbl="" then
+			Rollback Table Table_aktif(tab_pilih)
+		else
+			Rollback Table tbl
+		end if
+
+	end if
+
+	
+	Resume Nx_UpTab2	
+
+ElseIf Err()=590 then
+
+	if tbl="" then
+		Map From Table_aktif(tab_pilih)
+
+
+		Note "Pengisian coordinat (" + xy + ") pada tabel " + Table_aktif(tab_pilih) + " selesai dilakukan..."
+	
+	else
+		Map From tbl
+	end if
+
+	exit sub
+ElseIf Err()=683 then
+	
+	Note "Proses Pack,Indexing dan Tambah Field dilewatkan karena kemungkinan data di server, pastikan Field (X1,Y1,X2,Y2,XY1,XY2) sudah dibuat"
+
+	Remove Map Layer Table_aktif(tab_pilih)
+
+	Resume Nx_UpTab
+
+Else
+
+	Note Error$() + " #" + err()
+	Exit sub
+End If
+
+
+End Sub
+
+'''''''''''''''''''''''''''''''' isi Coordinat Gabungan '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub Q_insert_coord_awal_xy()
+	Call Q_insert_coord_gabungan("XY1")
+End Sub
+
+Sub Q_insert_coord_akhir_xy()
+	Call Q_insert_coord_gabungan("XY2")
+End Sub
+
+Sub Q_insert_coord_gabungan(Byval xy as String)
+OnError GoTo Err_handler
+
+dim coorsys as String
+
+Open File  ApplicationDirectory$() + "CoordSys.dat" For Input As #1
+
+Do While Not EOF(1)
+	Line Input #1,coorsys 
+Loop
+
+Close File #1
+
+if coorsys <>"" then
+	coorsys = "Set " + coorsys 
+
+	Run Command coorsys	
+
+Else
+
+	Note "set terlebih dahulu Coordinat System.."
+	OnError GoTo 0
+	Exit Sub
+
+end if
+
+Call Cari_Table_Aktif()
+	if Akt_t=0 then
+		Note "Tidak ada table yang aktif..."
+		OnError GoTo 0
+		exit sub
+	end if
+
+dim tab_pilih as Smallint
+
+Dialog
+	Title "Isi Coordinat Gabungan " + xy
+		Control StaticText
+		Title "Destination Table : "	
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih
+		id 1
+		width 100
+	Control OKButton
+	Control CancelButton
+
+if CommandInfo(CMD_INFO_DLG_OK) then
+
+
+Nx_UpTab2 :
+
+Pack Table Table_aktif(tab_pilih) Graphic Data
+
+' Tambahkan Field Baru
+
+dim sql as string
+	sql = "Alter Table " + Table_aktif(tab_pilih) + " (Add " + xy + " Char(50))"
+Run Command sql
+
+Nx_UpTab :
+
+'Update Column xy
+
+	Do case xy
+		case xy="XY1"	
+			Update Table_aktif(tab_pilih) set xy=objectgeography(obj,1) + "_" + objectgeography(obj,2)
+			'Create Index On Table_aktif(tab_pilih) (XY1)
+		case else
+			Update Table_aktif(tab_pilih) set xy=objectgeography(obj,3) + "_" + objectgeography(obj,4)
+			'Create Index On Table_aktif(tab_pilih) (XY2)
+	end case
+
+' Tambahkan lagi ke layer
+
+Add Map Layer Table_aktif(tab_pilih)
+
+Note "Pengisian coordinat gabungan (" + xy + ") pada tabel " + Table_aktif(tab_pilih) + " selesai dilakukan..."
+
+end if
+
+OnError GoTo 0
+Exit Sub
+
+Err_handler :
+
+If Err() = 363 then
+	Resume Nx_UpTab
+
+ElseIf Err()=968 then
+	
+	if Ask("Data anda belum disimpan,Anda ingin menyimpannya?","Yes","No")=True then
+		Commit Table Table_aktif(tab_pilih)
+	else
+		Rollback Table Table_aktif(tab_pilih)
+	end if
+	
+	Resume Nx_UpTab2	
+
+ElseIf Err()=590 then
+
+	Map From Table_aktif(tab_pilih)
+
+	Note "Pengisian coordinat (" + xy + ") pada tabel " + Table_aktif(tab_pilih) + " selesai dilakukan..."	
+
+	exit sub
+ElseIf Err()=683 then
+	
+	Note "Proses Pack,Indexing dan Tambah Field dilewatkan karena kemungkinan data di server, pastikan Field (X1,Y1,X2,Y2,XY1,XY2) sudah dibuat"
+
+	Remove Map Layer Table_aktif(tab_pilih)
+
+	Resume Nx_UpTab
+
+Else
+
+	Note Error$() + " #" + err()
+	Exit sub
+End If
+
+End Sub
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'''''''''''''''''''''''''''''Cek Snapping Titik Akhir Antara SUTR - TIANG TR atau SUTM - TIANG TM''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+Sub Q_Snapp_TRTM()
+OnError GoTo Err_handler
+
+dim coorsys as String
+
+Open File  ApplicationDirectory$() + "CoordSys.dat" For Input As #1
+
+Do While Not EOF(1)
+	Line Input #1,coorsys 
+Loop
+
+Close File #1
+
+if coorsys <>"" then
+	coorsys = "Set " + coorsys 
+
+	Run Command coorsys	
+
+Else
+
+	Note "set terlebih dahulu Coordinat System.."
+	OnError GoTo 0
+	Exit Sub
+
+end if
+
+Call Cari_Table_Aktif()
+	if Akt_t=0 then
+		Note "Tidak ada table yang aktif..."
+		OnError GoTo 0
+		exit sub
+	end if
+
+dim tab_pilih,tab_pilih2 as SmallInt
+
+Dialog
+	Title "Cek Snapp Coordinat Akhir ->Proses I"
+	Control StaticText
+		Title "Destination Table [ Line ] : "	
+		Position 3,5
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih
+		id 1
+		width 100
+		Position 93,5
+	Control StaticText
+		Title "Destination Table [ Point ] : "	
+		Position 3,23
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih2
+		id 2
+		width 100
+		Position 93,23
+		
+	Control OKButton
+	Control CancelButton
+
+if CommandInfo(CMD_INFO_DLG_OK) then
+
+
+Print Chr$(12)
+Print "Processing, Please Wait..."
+Print "1. Cek Other Object..."
+
+' cek object
+
+	select * from Table_aktif(tab_pilih) where Str$(obj)	= "PolyLine" into Hsl_Cek_Pline
+
+	if SelectionInfo(SEL_INFO_NROWS) >=1 then
+		if Ask(Table_aktif(tab_pilih) + " ditemukan object berupa Polyline, anda ingin memeriksanya terlebih dahulu?","Yes","No")=True then
+			
+			Print "1. Process Pending..."
+
+			Browse * from Hsl_Cek_Pline
+		
+			OnError GoTo 0
+			Exit Sub
+		else
+		
+			select * from Table_aktif(tab_pilih) where Str$(obj)	<> "Line" and Str$(obj)	<> "PolyLine" into Hsl_Cek_PLline
+
+			if SelectionInfo(SEL_INFO_NROWS) >=1 then
+				Note Table_aktif(tab_pilih) + " ditemukan object bukan Line/Polyline ..."
+
+				Print "1. Process Pending..."
+				Browse * from Hsl_Cek_PLline
+		
+				OnError GoTo 0
+				Exit Sub
+			end if
+
+		end if
+
+	else
+
+			select * from Table_aktif(tab_pilih) where Str$(obj)	<> "Line" into Hsl_cek_Line
+
+			if SelectionInfo(SEL_INFO_NROWS) >=1 then
+				Note Table_aktif(tab_pilih) + " ditemukan object bukan Line ..."
+				
+				Print "1. Process Pending..."
+				Browse * from Hsl_cek_Line
+		
+				OnError GoTo 0
+				Exit Sub
+			end if
+	
+
+	end if
+
+	select * from Table_aktif(tab_pilih2) where Str$(obj)	<> "Point" into Hsl_Cek_Point
+
+	if SelectionInfo(SEL_INFO_NROWS) >=1 then
+		Note Table_aktif(tab_pilih2) + " ditemukan object bukan Point ..."
+
+		Print "1. Process Pending..."
+		Browse * from Hsl_Cek_Point
+		
+		OnError GoTo 0
+		Exit Sub
+	end if	
+
+' di Pack Table yang akan di proses...
+
+Print "2. Pack Table and Indexing..."
+Nx_UpTab2 :
+
+Pack Table Table_aktif(tab_pilih) Graphic Data
+Pack Table Table_aktif(tab_pilih2) Graphic Data
+
+' Tambahkan Field Baru
+Nx_UpTab3 :
+Print "3. Alter Table(Add Field)..."
+
+Alter Table Table_aktif(tab_pilih) (Add XY2 char(50))
+'Create Index On Table_aktif(tab_pilih) (XY2)
+
+Alter Table Table_aktif(tab_pilih2) (Add XY2 char(50))
+'Create Index On Table_aktif(tab_pilih2) (XY2)
+
+
+Nx_UpTab :
+
+Print "4. Update Table and Add to Layer Active...."
+
+'Update Column Tmp_xy
+Update Table_aktif(tab_pilih) set XY2=ObjectGeography(Obj,3) + "_" + ObjectGeography(Obj,4)
+Update Table_aktif(tab_pilih2) set XY2=ObjectGeography(Obj,3) + "_" + ObjectGeography(Obj,4)
+
+' Tambahkan lagi ke layer
+
+Add Map Layer Table_aktif(tab_pilih)
+Add Map Layer Table_aktif(tab_pilih2)
+
+'Proses Query
+Print "5. Query double Coordinat/Overlapping Object...."
+
+Select XY2,count(*)  from Table_aktif(tab_pilih) Group By XY2 Order By XY2 Into Hsl_Coord_1
+Select XY2,count(*)  from Table_aktif(tab_pilih2) Group By XY2 Order By XY2 Into Hsl_Coord_2
+
+dim hsil,hsil2 as integer
+
+select * from Hsl_Coord_1 where count > 1 Into Hsl_Coord_11
+
+	hsil= SelectionInfo(SEL_INFO_NROWS)
+
+select * from Hsl_Coord_2 where count > 1 Into Hsl_Coord_22
+
+	hsil2 =SelectionInfo(SEL_INFO_NROWS)
+
+if hsil >=1 or hsil2 >=1 then
+
+	if Ask("Ada beberapa Coordinat yang sama, kemungkinan ada kesalahan penggambaran object.." + chr$(10) + "Anda ingin memeriksanya...??","Yes","No")=True then
+		if hsil >=1 then
+			select * from Table_aktif(tab_pilih) where XY2 in (select XY2 from Hsl_Coord_11) Into Hsl_Coord_11_1
+			Print "Process Pending..."
+			Browse * from Hsl_Coord_11_1
+		end if
+	
+		if hsil2 >=1 then
+			select * from Table_aktif(tab_pilih2) where XY2 in (select XY2 from Hsl_Coord_22) Into Hsl_Coord_22_2
+			Print "Process Pending..."
+			Browse * From Hsl_Coord_22_2
+		end if
+
+		OnError GoTo 0		
+		Exit Sub
+
+	end if
+end if	
+
+' cek perbandingan coordinat yang telah dibuat
+
+dim sql as string
+
+Print "6. Query Snapping...."
+
+sql = "Select * From " + Table_aktif(tab_pilih) +","+ Table_aktif(tab_pilih2) + " where " + Table_aktif(tab_pilih) + ".XY2" + "=" + Table_aktif(tab_pilih2) + ".XY2" + " into Selection"
+
+	Run Command sql
+
+	hsil =SelectionInfo(SEL_INFO_NROWS)
+
+if hsil  >= 1 then
+	Run Menu Command 311
+
+		hsil =SelectionInfo(SEL_INFO_NROWS)
+			if hsil  >= 1 then
+				Print "Pocess Complete..."
+				Browse * from Selection
+			else
+				Print "Pocess Complete..."
+				Note "Proses Cek Snapping selesai dan tidak ditemukan masalah..."
+			end if
+else
+	
+	sql = "Select * From " + Table_aktif(tab_pilih2) +","+ Table_aktif(tab_pilih) + " where " + Table_aktif(tab_pilih2) + ".XY2" + "=" + Table_aktif(tab_pilih) + ".XY2" + " into Selection"
+	
+	Run Command sql
+
+	hsil2 =SelectionInfo(SEL_INFO_NROWS)
+
+	if hsil2 >=  1 then
+
+		Run Menu Command 311
+
+			hsil =SelectionInfo(SEL_INFO_NROWS)
+			if hsil  >= 1 then
+					Print "Pocess Complete..."
+					Browse * from Selection
+			else
+					Print "Pocess Complete..."
+					Note "Proses Cek Snapping selesai dan tidak ditemukan masalah..."
+			end if
+
+	else
+		Print "Pocess Complete..."
+		Note "Proses Cek Snapping selesai dan tidak ditemukan masalah..."
+	end if
+
+end if
+
+End If
+
+
+
+OnError GoTo 0
+Exit Sub
+
+Err_handler :
+
+If Err() = 363 then
+	Resume Nx_UpTab
+
+ElseIf Err()=968 then
+	
+	if Ask("Data anda belum disimpan,Anda ingin menyimpannya?","Yes","No")=True then
+		Commit Table Table_aktif(tab_pilih)
+		Commit Table Table_aktif(tab_pilih2)
+	else
+		Rollback Table Table_aktif(tab_pilih)
+		Rollback Table Table_aktif(tab_pilih2)
+	end if
+	
+	Resume Nx_UpTab2	
+
+ElseIf Err()=683 then
+	
+	Note "Proses Pack,Indexing dan Tambah Field dilewatkan karena kemungkinan data di server, pastikan Field (X1,Y1,X2,Y2,XY1,XY2) sudah dibuat"
+
+	Remove Map Layer Table_aktif(tab_pilih)
+	Remove Map Layer Table_aktif(tab_pilih2)
+
+	Resume Nx_UpTab
+
+ElseIf Err()=590 then
+
+	Map From Table_aktif(tab_pilih),Table_aktif(tab_pilih2)
+	exit sub
+
+Else
+
+	Note Error$() + " #" + err()
+	Exit sub
+End If
+
+End Sub
+
+''''''''''''''''''''''''''' Cek Snapping Titik Awal Antara SUTR - TIANG TR atau SUTM - TIANG TM ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub Q_Snapp_TRTM_Akhir ()
+OnError Goto Err_handler
+
+dim coorsys as String
+
+Open File  ApplicationDirectory$() + "CoordSys.dat" For Input As #1
+
+Do While Not EOF(1)
+	Line Input #1,coorsys 
+Loop
+
+Close File #1
+
+if coorsys <>"" then
+	coorsys = "Set " + coorsys 
+
+	Run Command coorsys	
+
+Else
+
+	Note "set terlebih dahulu Coordinat System.."
+	OnError GoTo 0
+	Exit Sub
+
+end if
+
+Call Cari_Table_Aktif()
+	if Akt_t=0 then
+		Note "Tidak ada table yang aktif..."
+		OnError GoTo 0
+		exit sub
+	end if
+
+dim tab_pilih,tab_pilih2,tab_pilih3 as SmallInt
+dim table_aktif_k() as string
+
+	redim table_aktif_k(0)
+	redim table_aktif_k(ubound(table_aktif) +1)
+	
+dim rowtab as integer
+	for rowtab = 0 to ubound(table_aktif)
+		if rowtab=0 then
+			table_aktif_k(rowtab+1)= " "
+		else
+			table_aktif_k(rowtab+1)= table_aktif(rowtab)
+		end if
+	next	
+
+Dialog
+	Title "Cek Snapping Coordinat Awal ->Proses II"
+	Control StaticText
+		Title "Destination Table [ Line ] : "	
+		Position 3,5
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih
+		id 1
+		width 100
+		Position 93,5
+	Control StaticText
+		Title "Destination Table [ Point ] : "	
+		Position 3,23
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih2
+		id 2
+		width 100
+		Position 93,23
+	Control StaticText
+		Title "Start Point : "	
+		Position 3,40
+	control PopupMenu
+		Title From Variable Table_aktif_k
+		into tab_pilih3
+		id 2
+		width 100
+		Position 93,40	
+
+	Control OKButton
+	Control CancelButton
+
+If CommandInfo(CMD_INFO_DLG_OK) then
+
+' cek object
+
+Print Chr$(12)
+Print "Processing, Please Wait..."
+Print "1. Cek Other Object..."
+
+	select * from Table_aktif(tab_pilih) where Str$(obj)	= "PolyLine" into Hsl_Cek_Pline
+
+	if SelectionInfo(SEL_INFO_NROWS) >=1 then
+		if Ask(Table_aktif(tab_pilih) + " ditemukan object berupa Polyline, anda ingin memeriksanya terlebih dahulu?","Yes","No")=True then
+			
+			Print "Process Pending..."
+			Browse * from Hsl_Cek_Pline
+			
+			OnError GoTo 0
+			Exit Sub
+		else
+		
+			select * from Table_aktif(tab_pilih) where Str$(obj)	<> "Line" and Str$(obj)<> "PolyLine" into Hsl_Cek_PLline
+
+			if SelectionInfo(SEL_INFO_NROWS) >=1 then
+				Note Table_aktif(tab_pilih) + " ditemukan object bukan Line/Polyline ..."
+				
+				Print "Process Pending..."
+				Browse * from Hsl_Cek_PLline
+
+				OnError GoTo 0
+				Exit Sub
+			end if
+
+		end if
+
+	else
+
+			select * from Table_aktif(tab_pilih) where Str$(obj)	<> "Line" into Hsl_cek_Line
+
+			if SelectionInfo(SEL_INFO_NROWS) >=1 then
+				Note Table_aktif(tab_pilih) + " ditemukan object bukan Line ..."
+				Print "Process Pending..."
+				Browse * from Hsl_cek_Line
+				
+				OnError GoTo 0
+				Exit Sub
+			end if
+	
+
+	end if
+
+dim a as integer
+for a=1 to 2
+	
+	if a =1 then
+		select * from Table_aktif(tab_pilih2) where Str$(obj)<> "Point" into Hsl_Cek_Point
+	else
+		if tab_pilih3 <> 1 then	
+			select * from Table_aktif_k(tab_pilih3) where Str$(obj)<> "Point" into Hsl_Cek_Point2
+		end if
+	end if	
+
+	if SelectionInfo(SEL_INFO_NROWS) >=1 then
+		
+		if a=1 then
+			Note Table_aktif(tab_pilih2) + " ditemukan object bukan Point ..."
+			Print "Process Pending..."
+			Browse * from Hsl_Cek_Point
+		else
+			if tab_pilih3 <> 1 then
+				Note Table_aktif_k(tab_pilih3) + " ditemukan object bukan Point ..."
+				Print "Process Pending..."
+				Browse * from Hsl_Cek_Point2
+			end if
+		end if
+
+		OnError GoTo 0
+		Exit Sub
+	end if	
+next
+
+' di Pack Table yang akan di proses...
+
+dim ul_error as SmallInt
+	ul_error=1	
+
+
+Print "2. Pack Table and Indexing..."
+Nx_UpTab2 :
+
+Pack Table Table_aktif(tab_pilih) Graphic Data
+Pack Table Table_aktif(tab_pilih2) Graphic Data
+
+if tab_pilih3 <> 1 then
+	Pack Table Table_aktif_k(tab_pilih3) Graphic Data
+end if
+
+Print "3. Alter Table(Add Field)..."
+' Tambahkan Field Baru
+Alter Table Table_aktif(tab_pilih) (Add XY1 char(50))
+'Create Index On Table_aktif(tab_pilih) (XY1)
+
+Alter Table Table_aktif(tab_pilih2) (Add XY1 char(50))
+'Create Index On Table_aktif(tab_pilih2) (XY1)
+
+Nx_UpTab :
+if tab_pilih3 <> 1 then
+	Alter Table Table_aktif_k(tab_pilih3) (Add XY1 char(50))
+	'Create Index On Table_aktif(tab_pilih3) (XY1)
+end if
+
+
+Nx_UpTab3 :
+Print "4. Update Table...."
+
+'Update Column Tmp_xy
+Update Table_aktif(tab_pilih) set XY1=ObjectGeography(Obj,1) + "_" + ObjectGeography(Obj,2)
+Update Table_aktif(tab_pilih2) set XY1=ObjectGeography(Obj,1) + "_" + ObjectGeography(Obj,2)
+
+	if tab_pilih3 <> 1 then
+		Update Table_aktif_k(tab_pilih3) set XY1=ObjectGeography(Obj,1) + "_" + ObjectGeography(Obj,2)
+	end if	
+
+' Tambahkan lagi ke layer
+
+Print "5. Add to Layer Active..."
+
+Add Map Layer Table_aktif(tab_pilih)
+Add Map Layer Table_aktif(tab_pilih2)
+	if tab_pilih3 <> 1 then
+		Add Map Layer Table_aktif_k(tab_pilih3)
+	end if
+
+'Proses Query	
+
+' cek perbandingan coordinat yang telah dibuat
+
+dim sql as string
+
+Print "6. Query..."
+
+sql = "Select * From " + Table_aktif(tab_pilih) +","+ Table_aktif(tab_pilih2) + " where " + Table_aktif(tab_pilih) + ".XY1" + "=" + Table_aktif(tab_pilih2) + ".XY1" + " into Selection"
+
+	Run Command sql
+
+	Run Menu Command 311	
+	
+	dim hsil as SmallInt
+	hsil =SelectionInfo(SEL_INFO_NROWS)
+
+if hsil  >= 1 then
+
+'		Commit Table Kapling As "C:\Documents and Settings\@rd14n\My Documents\testw.tab" TYPE NATIVE Charset "WindowsLatin1" Interactive
+		
+		if tab_pilih3 <> 1 then
+
+		Print "--- 6.1 Save Selection and Add to map..."		
+
+		Commit Table Selection As ApplicationDirectory$() + "\Temp\Hsil_NotSnap1.tab" TYPE NATIVE Charset "WindowsLatin1"
+		
+		open Table 	ApplicationDirectory$() + "\Temp\Hsil_NotSnap1.tab"
+		Add Map Auto Layer Hsil_NotSnap1
+		
+		
+
+			Print "--- 6.2 Query First Object Not Snap..."
+			
+			dim sql1 as string
+			sql1 = "Select * From " + Hsil_NotSnap1 +","+ Table_aktif_k(tab_pilih3) + " where " + Hsil_NotSnap1 + ".XY1" + "=" + Table_aktif_k(tab_pilih3) + ".XY1" + " into Selection"
+			
+			Run Command sql1
+
+			Run Menu Command 311
+			
+			hsil =SelectionInfo(SEL_INFO_NROWS)
+			
+			if hsil >=1 then
+				
+				Print "--- 6.3 Query Not Snap From Other Object..."
+				
+				Commit Table Selection As ApplicationDirectory$() + "\Temp\Hsil_NotSnap2.tab" TYPE NATIVE Charset "WindowsLatin1"
+
+				open Table 	ApplicationDirectory$() + "\Temp\Hsil_NotSnap2.tab"
+				Add Map Auto Layer Hsil_NotSnap2
+
+				'Browse * from Selection		
+	
+				select * from Table_aktif(tab_pilih) where XY1 in (select XY1 from Hsil_NotSnap2)
+
+				Print "Processing Complete..."
+				Close Table Hsil_NotSnap1					
+				Close Table Hsil_NotSnap2					
+
+				Browse * from Selection
+			else
+				Print "Processing Complete..."
+				Close Table Hsil_NotSnap1	
+				Note "Cek Snapping Complete, Tidak Ditemukan data bermasalah..."
+			end if
+	
+
+		else
+			Print "Processing Complete..."
+			Browse * from Selection
+		end if
+		
+			
+else
+	Print "Processing Complete..."
+	Note "Cek Snapping Complete, Tidak Ditemukan data bermasalah..."
+
+end if
+
+
+End If
+
+OnError GoTo 0
+Exit Sub
+
+Err_handler :
+
+ul_error = ul_error +1
+
+If (Err() = 363 or Err()=1296) then
+	if ul_error =2 then
+		Resume Nx_UpTab
+	else
+		Resume Nx_UpTab3
+	end if
+
+ElseIf (Err()=1285 or Err()=968 or Err()=1290) then
+	
+	if Ask("Data anda belum disimpan,Anda ingin menyimpannya?","Yes","No")=True then
+		Commit Table Table_aktif(tab_pilih)
+		Commit Table Table_aktif(tab_pilih2)
+		if tab_pilih3 <>1 then
+			Commit Table Table_aktif_k(tab_pilih3)
+		end if
+	else
+		Rollback Table Table_aktif(tab_pilih)
+		Rollback Table Table_aktif(tab_pilih2)
+		if tab_pilih3 <> 1 then
+			Rollback Table Table_aktif_k(tab_pilih3)
+		end if
+	end if
+	
+	Resume Nx_UpTab2	
+
+ElseIf Err()=683 then
+	
+	Note "Proses Pack,Indexing dan Tambah Field dilewatkan karena kemungkinan data di server, pastikan Field (X1,Y1,X2,Y2,XY1,XY2) sudah dibuat"
+
+	'Remove Map Layer Table_aktif(tab_pilih)
+	'Remove Map Layer Table_aktif(tab_pilih2)
+
+	'if tab_pilih3 <> 1 then
+	'	Remove Map Layer Table_aktif(tab_pilih3)
+	'end if
+
+	Resume Nx_UpTab3
+
+ElseIf Err()=590 then
+
+	Map From Table_aktif(tab_pilih),Table_aktif(tab_pilih2)
+	exit sub
+
+ElseIf Err()=370 then
+
+	Note "Proses Simpan data tidak berhasil karna folder tidak ditemukan, silahkan buat folder dengan nama Temp dimana aplikasi anda diletakkan yaitu : "	+ ApplicationDirectory$()
+	
+	Print "Process Pending..."
+	
+	Exit Sub	
+
+Else
+
+	Note Error$() + " #" + err()
+	Exit sub
+End If
+
+End Sub
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'''''''''''''''''''''''''''''' Create Point From Coordinat '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub Q_create_point()
+OnError Goto Err_handler
+
+Call Cari_Table_Aktif()
+	if Akt_t=0 then
+		Note "Tidak ada table yang aktif..."
+		OnError GoTo 0
+		exit sub
+	end if
+
+dim tab_pilih,acuan_coord as Smallint
+
+Dialog
+	Title "Create Point From Coordinat"
+		Control StaticText
+		Title "Destination Table : "	
+	control PopupMenu
+		Title From Variable Table_aktif
+		into tab_pilih
+		id 1
+		width 100
+	control groupbox
+		Title "Acuan Coordinat :"
+		Position 5,25 Width 200 Height	50
+	control radiogroup
+		Title "Coordinat &Awal(X1,Y1);Coordinat A&khir(X2,Y2)"
+		Value 2
+		into acuan_coord
+		id 2
+		Position 13,40 Width 190
+
+	Control OKButton
+	Control CancelButton
+
+if CommandInfo(CMD_INFO_DLG_OK) then
+
+	if acuan_coord=1 then
+		
+		Call Q_Isi_coord_sebenarnya("AWAL",Table_aktif(tab_pilih))		
+
+		update Table_aktif(tab_pilih) set obj=createpoint(x1,y1)		
+
+	else
+		Call Q_Isi_coord_sebenarnya("AKHIR",Table_aktif(tab_pilih))
+
+		update Table_aktif(tab_pilih) set obj=createpoint(x2,y2)
+
+	end if
+
+end if
+
+OnError Goto 0
+Exit Sub
+
+Err_handler :
+
+if Err()=414 then
+	
+	Note "Create Point gagal dilakukan, karna ada beberapa proses yang dibatalkan..."
+	Exit sub
+
+else
+
+	Note Error$() + " #" + err()
+	Exit sub
+
+end if
+
+End Sub
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+''''''''''''''''''''''''''''''' Close Aplikasi ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub Q_close_tools()
+	End Program
+End Sub
+
